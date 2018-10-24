@@ -58,10 +58,10 @@ module ActiveRecord
     FROZEN_EMPTY_ARRAY = [].freeze
     FROZEN_EMPTY_HASH = {}.freeze
 
-    Relation::VALUE_METHODS.each do |name|
+    (Relation::VALUE_METHODS + [:applicable_joins]).each do |name|
       method_name = \
         case name
-        when *Relation::MULTI_VALUE_METHODS then "#{name}_values"
+        when *(Relation::MULTI_VALUE_METHODS + [:applicable_joins]) then "#{name}_values"
         when *Relation::SINGLE_VALUE_METHODS then "#{name}_value"
         when *Relation::CLAUSE_METHODS then "#{name}_clause"
         end
@@ -381,6 +381,10 @@ module ActiveRecord
             raise ArgumentError, "Called unscope() with invalid unscoping argument ':#{scope}'. Valid arguments are :#{VALID_UNSCOPING_VALUES.to_a.join(", :")}."
           end
           set_value(scope, DEFAULT_VALUES[scope])
+
+          if scope == :left_outer_joins || scope == :joins
+            set_value(:applicable_joins, DEFAULT_VALUES[:scope])
+          end
         when Hash
           scope.each do |key, target_value|
             if key != :where
@@ -435,6 +439,7 @@ module ActiveRecord
     def joins!(*args) # :nodoc:
       args.compact!
       args.flatten!
+      self.applicable_joins_values += args.map { |arg| [Arel::Nodes::InnerJoin, arg] }
       self.joins_values += args
       self
     end
@@ -453,6 +458,7 @@ module ActiveRecord
     def left_outer_joins!(*args) # :nodoc:
       args.compact!
       args.flatten!
+      self.applicable_joins_values += args.map { |arg| [Arel::Nodes::OuterJoin, arg] }
       self.left_outer_joins_values += args
       self
     end
@@ -929,8 +935,7 @@ module ActiveRecord
       def build_arel(aliases)
         arel = Arel::SelectManager.new(table)
 
-        aliases = build_joins(arel, joins_values.flatten, aliases) unless joins_values.empty?
-        build_left_outer_joins(arel, left_outer_joins_values.flatten, aliases) unless left_outer_joins_values.empty?
+        build_joins(arel, applicable_joins_values, aliases) unless applicable_joins_values.empty?
 
         arel.where(where_clause.ast) unless where_clause.empty?
         arel.having(having_clause.ast) unless having_clause.empty?
@@ -978,38 +983,29 @@ module ActiveRecord
         end
       end
 
-      def build_left_outer_joins(manager, outer_joins, aliases)
-        buckets = outer_joins.group_by do |join|
-          case join
-          when Hash, Symbol, Array
-            :association_join
-          when ActiveRecord::Associations::JoinDependency
-            :stashed_join
-          else
-            raise ArgumentError, "only Hash, Symbol and Array are allowed"
-          end
-        end
-
-        build_join_query(manager, buckets, Arel::Nodes::OuterJoin, aliases)
-      end
-
       def build_joins(manager, joins, aliases)
-        buckets = joins.group_by do |join|
-          case join
-          when String
-            :string_join
-          when Hash, Symbol, Array
-            :association_join
-          when ActiveRecord::Associations::JoinDependency
-            :stashed_join
-          when Arel::Nodes::Join
-            :join_node
-          else
-            raise "unknown class: %s" % join.class.name
+        chunks = joins.chunk { |join_type, _join| join_type }
+
+        chunks.each do |join_type, join_chunks|
+          buckets = join_chunks.map(&:second).group_by do |join|
+            case join
+            when String
+              :string_join
+            when Hash, Symbol, Array
+              :association_join
+            when ActiveRecord::Associations::JoinDependency
+              :stashed_join
+            when Arel::Nodes::Join
+              :join_node
+            else
+              raise "unknown class: %s" % join.class.name
+            end
           end
+
+          aliases = build_join_query(manager, buckets, join_type, aliases)
         end
 
-        build_join_query(manager, buckets, Arel::Nodes::InnerJoin, aliases)
+        aliases
       end
 
       def build_join_query(manager, buckets, join_type, aliases)
@@ -1200,7 +1196,8 @@ module ActiveRecord
         create_with: FROZEN_EMPTY_HASH,
         where: Relation::WhereClause.empty,
         having: Relation::WhereClause.empty,
-        from: Relation::FromClause.empty
+        from: Relation::FromClause.empty,
+        applicable_joins: FROZEN_EMPTY_ARRAY
       }
 
       Relation::MULTI_VALUE_METHODS.each do |value|
