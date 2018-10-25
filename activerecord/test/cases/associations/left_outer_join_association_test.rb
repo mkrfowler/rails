@@ -56,10 +56,6 @@ class LeftOuterJoinAssociationTest < ActiveRecord::TestCase
     assert queries.none? { |sql| /LEFT OUTER JOIN/i.match?(sql) }
   end
 
-  def test_left_outer_joins_forbids_to_use_string_as_argument
-    assert_raise(ArgumentError) { Author.left_outer_joins('LEFT OUTER JOIN "posts" ON "posts"."user_id" = "users"."id"').to_a }
-  end
-
   def test_join_conditions_added_to_join_clause
     queries = capture_sql { Author.left_outer_joins(:essays).to_a }
     assert queries.any? { |sql| /writer_type.*?=.*?(Author|\?|\$1|\:a1)/i.match?(sql) }

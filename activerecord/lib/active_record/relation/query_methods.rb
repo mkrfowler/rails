@@ -382,8 +382,12 @@ module ActiveRecord
           end
           set_value(scope, DEFAULT_VALUES[scope])
 
-          if scope == :left_outer_joins || scope == :joins
-            set_value(:applicable_joins, DEFAULT_VALUES[:scope])
+          if scope == :left_outer_joins
+            residual_joins = get_value(:joins).map { |join| [Arel::Nodes::InnerJoin, join] }
+            set_value(:applicable_joins, residual_joins)
+          elsif scope == :joins
+            residual_joins = get_value(:left_outer_joins).map { |join| [Arel::Nodes::OuterJoin, join] }
+            set_value(:applicable_joins, residual_joins)
           end
         when Hash
           scope.each do |key, target_value|

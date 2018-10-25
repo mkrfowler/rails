@@ -5,6 +5,7 @@ require "models/post"
 require "models/comment"
 require "models/developer"
 require "models/project"
+require "models/contract"
 require "models/computer"
 require "models/vehicle"
 require "models/cat"
@@ -234,6 +235,12 @@ class DefaultScopingTest < ActiveRecord::TestCase
   def test_unscope_left_joins
     expected = Developer.all.collect(&:name)
     received = Developer.left_joins(:projects).select(:id).unscope(:left_joins, :select).collect(&:name)
+    assert_equal expected, received
+  end
+
+  def test_unscope_left_outer_joins_leaves_joins_intact
+    expected = Developer.joins(:contracts).all.collect(&:name)
+    received = Developer.joins(:contracts).left_outer_joins(:projects).select(:id).unscope(:left_outer_joins, :select).collect(&:name)
     assert_equal expected, received
   end
 
