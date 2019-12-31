@@ -48,7 +48,7 @@ module ActiveRecord
           end
 
           def middle_records
-            through_preloaders.flat_map(&:preloaded_records)
+            through_preloaders.flat_map(&:preloaded_records).uniq(&:object_id)
           end
 
           def through_preloaders

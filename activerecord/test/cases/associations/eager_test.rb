@@ -779,6 +779,16 @@ class EagerAssociationTest < ActiveRecord::TestCase
     assert_equal post1.object_id, post2.object_id
   end
 
+  def test_preloader_across_unifying_through
+    post = Post.create!(author: authors(:david), title: "HABTM post", body: "", categories: [categories(:general)])
+    5.times { |i| post.comments.create!(author: authors(:david), body: "Comment #{i}") }
+
+    comments = post.reload.comments.preload(:siblings, :categories).load
+
+    assert_equal 1, comments.first.categories.size
+    assert_equal 5, comments.first.siblings.size
+  end
+
   def test_eager_with_has_many_and_limit_and_conditions_on_the_eagers
     posts =
       authors(:david).posts
