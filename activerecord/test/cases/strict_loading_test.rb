@@ -210,6 +210,19 @@ class StrictLoadingTest < ActiveRecord::TestCase
     end
   end
 
+  def test_strict_loading_with_non_loading_write
+    with_strict_loading_by_default(Developer) do
+      dev = Developer.first
+      dev.audit_logs.create!(message: "some log")
+
+      dev.reload
+
+      assert_raises ActiveRecord::StrictLoadingViolationError do
+        dev.audit_logs.to_a
+      end
+    end
+  end
+
   def test_strict_loading_with_has_many_through_cascade_down_to_middle_records
     dev = Developer.first
     firm = Firm.create!(name: "NASA")

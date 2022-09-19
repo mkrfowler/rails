@@ -1038,7 +1038,7 @@ module ActiveRecord
   private
     def strict_loaded_associations
       @association_cache.find_all do |_, assoc|
-        assoc.owner.strict_loading? && !assoc.owner.strict_loading_n_plus_one_only?
+        assoc.owner.strict_loading? && !assoc.owner.strict_loading_n_plus_one_only? && assoc.loaded?
       end.map(&:first)
     end
 
